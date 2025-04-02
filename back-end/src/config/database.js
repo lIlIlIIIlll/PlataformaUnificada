@@ -1,8 +1,12 @@
-import { Sequelize } from "sequelize";
+// src/config/database.js
+const { Sequelize } = require('sequelize');
+const path = require('path');
+const storagePath = path.join(__dirname, '..', '..', 'database.sqlite');
+
 
 const SQ = new Sequelize({
     dialect:'sqlite',
-    storage:'../../database.sqlite'
+    storage:storagePath
 });
 
-export default SQ;
+module.exports = SQ;

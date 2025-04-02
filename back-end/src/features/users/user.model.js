@@ -1,97 +1,115 @@
-// src/features/models/user/user.model.js
-
+// src/features/users/user.model.js
 const { DataTypes, Model } = require('sequelize');
 
-// Definimos uma função que receberá a instância do sequelize
-// e definirá o modelo dentro dela. Isso é útil para centralizar
-// a inicialização e associações posteriormente.
 module.exports = (sequelize) => {
   class User extends Model {
-    /**
-     * Helper method for defining associations.
-     * This method is not a part of Sequelize lifecycle.
-     * The `models/index` file will call this method automatically.
-     */
     static associate(models) {
-      // define association here if needed later
-      // Ex: User.hasMany(models.LockerBooking);
+      // User belongs to one Branch
+      User.belongsTo(models.Branch, {
+        foreignKey: 'branchId', // Corresponds to id_filial in SQL
+        as: 'branch',
+        // Consider onDelete behavior based on SQL: ON DELETE SET NULL or RESTRICT might be needed
+        // onDelete: 'SET NULL', // Example if users shouldn't be deleted with branch
+        // onUpdate: 'CASCADE' // Usually safe
+      });
+
+      // User has many LockerReservations
+      User.hasMany(models.LockerReservation, {
+        foreignKey: 'userId', // Corresponds to user_id in SQL
+        as: 'reservations',
+        // Consider onDelete behavior: RESTRICT if users with active reservations can't be deleted
+        // onDelete: 'RESTRICT', // Example
+        // onUpdate: 'CASCADE'
+      });
     }
   }
 
   User.init({
-    // ID Padrão gerenciado pelo Sequelize (PK, Auto Increment)
     id: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.BIGINT.UNSIGNED, // Match SQL
       autoIncrement: true,
       primaryKey: true,
       allowNull: false,
     },
+    // Foreign Key for Branch
+    branchId: {
+        type: DataTypes.BIGINT.UNSIGNED,
+        allowNull: false,
+        field: 'id_filial', // Explicitly map to the SQL column name
+        references: { // Optional: Define reference here too
+            model: 'branches', // table name
+            key: 'id'
+        },
+        comment: 'ID da filial à qual o usuário pertence.',
+    },
     name: {
-      type: DataTypes.STRING,
+      type: DataTypes.TEXT, // Match SQL
       allowNull: false,
       comment: 'Nome completo do usuário.',
     },
     whatsappNumber: {
-      type: DataTypes.STRING,
+      type: DataTypes.TEXT, // Match SQL (Consider STRING if format is fixed)
       allowNull: false,
-      unique: true, // Garante que cada número de WhatsApp seja único
-      comment: 'Número do WhatsApp do usuário (usado como identificador principal). Formato E.164 recomendado (+55119...).',
+      unique: true, // Keep unique constraint if needed (SQL doesn't specify but likely desired)
+      comment: 'Número do WhatsApp do usuário.',
     },
     cpf: {
-      type: DataTypes.STRING,
-      allowNull: false, // Será coletado na etapa 3
-      unique: true, // Garante que cada CPF seja único
-      comment: 'Cadastro de Pessoa Física do usuário.',
-      // TODO: Adicionar validação de formato de CPF se necessário
+      type: DataTypes.STRING(11),
+      allowNull: false,
+      unique: true, // Keep unique constraint if needed (SQL doesn't specify but likely desired)
+      comment: 'CPF do usuário.',
     },
     dateOfBirth: {
-      type: DataTypes.DATEONLY, // Armazena apenas a data (YYYY-MM-DD)
-      allowNull: false, // Será coletado na etapa 3
+      type: DataTypes.DATEONLY, // Match SQL DATE
+      allowNull: false,
       comment: 'Data de nascimento do usuário.',
     },
     gender: {
-      type: DataTypes.STRING,
-      allowNull: true, // Será coletado na etapa 3, pode ser opcional dependendo da regra
+      type: DataTypes.STRING, // Match SQL VARCHAR(255)
+      allowNull: false, // SQL specifies NOT NULL
       comment: 'Gênero do usuário.',
-      // Poderia ser um ENUM: DataTypes.ENUM('Masculino', 'Feminino', 'Outro', 'Prefiro não informar')
-    },
-    photoUrl: {
-        type: DataTypes.STRING, // Ou DataTypes.TEXT
-        allowNull: false, // <-- MUDANÇA AQUI: Tornar obrigatório
-        comment: 'URL ou identificador da foto de face obrigatória do usuário.', // <-- Atualização no comentário
+       // Consider ENUM if you prefer stricter validation:
+       // type: DataTypes.ENUM('Masculino', 'Feminino', 'Outro', 'Prefiro não informar'),
     },
     address: {
-      type: DataTypes.TEXT, // Usar TEXT para endereços potencialmente longos
-      allowNull: true, // Será coletado na etapa 4, pode ser opcional para o fluxo principal
-      comment: 'Endereço do usuário (coletado na etapa 4 ou fluxo sem foto).',
+      type: DataTypes.STRING, // Match SQL VARCHAR(255)
+      allowNull: false, // SQL specifies NOT NULL
+      comment: 'Endereço do usuário.',
     },
     isBlocked: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
-        defaultValue: false,
-        comment: 'Indica se o usuário está bloqueado no sistema (ex: por débitos).',
+        defaultValue: false, // Match SQL default
+        comment: 'Indica se o usuário está bloqueado.',
     },
-    // Campos de controle do Sequelize (createdAt, updatedAt) são adicionados automaticamente
-    // Se precisar de campos específicos para Hikvision, podem ser adicionados aqui depois:
-    // hikvisionPersonId: {
-    //   type: DataTypes.STRING,
-    //   allowNull: true,
-    //   comment: 'ID do usuário no sistema Hikvision (se aplicável).'
-    // }
-    // isAdmin: { // Se for usar a mesma tabela para admins do painel
-    //    type: DataTypes.BOOLEAN,
-    //    defaultValue: false
-    // }
+    photoPath: {
+        type: DataTypes.TEXT, // Match SQL
+        allowNull: false, // SQL specifies NOT NULL
+        comment: 'Caminho ou identificador da foto obrigatória do usuário.',
+    },
+    registeredAt: {
+        type: DataTypes.DATE, // Match SQL DATETIME
+        allowNull: false,
+        defaultValue: DataTypes.NOW, // Set default in Sequelize if needed
+        comment: 'Data e hora do cadastro inicial.',
+    },
+    lastLoginAt: {
+        type: DataTypes.DATE, // Match SQL DATETIME
+        allowNull: false, // SQL requires it, might need manual update on login
+        comment: 'Data e hora do último login.',
+    }
+    // createdAt and updatedAt are handled by timestamps: true
+    // hikvisionPersonId removed as it's not in the new SQL schema
 
   }, {
-    // Opções do Modelo
-    sequelize, // Passa a instância da conexão sequelize
-    modelName: 'User', // Nome do modelo em CamelCase (usado no código JS)
-    tableName: 'users', // Nome da tabela no banco de dados (geralmente plural e snake_case)
-    timestamps: true, // Habilita createdAt e updatedAt automaticamente
-    underscored: true, // Mapeia camelCase (whatsappNumber) para snake_case (whatsapp_number) no DB
-    comment: 'Tabela para armazenar informações dos usuários finais do sistema.',
-    // paranoid: true, // Se quiser usar soft delete (adiciona deletedAt) - opcional
+    sequelize,
+    modelName: 'User',
+    tableName: 'users',
+    timestamps: true, // Assumes createdAt and updatedAt columns exist or should be managed by Sequelize
+    underscored: true, // Maps camelCase to snake_case (e.g., branchId -> branch_id in DB queries if not explicitly mapped by `field`)
+    // createdAt: 'registeredAt', // Use specific column name if timestamps: true is used and names differ. Requires updatedAt too.
+    // updatedAt: false, // Or specify the column name if it exists
+    comment: 'Tabela para armazenar informações dos usuários finais.',
   });
 
   return User;

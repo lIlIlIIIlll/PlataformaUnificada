@@ -1,17 +1,17 @@
 // src/features/users/user.routes.js
-
 const express = require('express');
-const userController = require('./user.controller'); // Importa o controller de usuário
+const userController = require('./user.controller');
 
-// Cria uma instância do Router do Express específica para usuários
 const router = express.Router();
 
 /**
  * @swagger
  * tags:
  *   name: Users
- *   description: Gerenciamento e verificação de usuários
+ *   description: Gerenciamento e verificação de usuários finais
  */
+
+// --- Existing Routes ---
 
 /**
  * @swagger
@@ -25,22 +25,11 @@ const router = express.Router();
  *         schema:
  *           type: string
  *         required: true
- *         description: Número do WhatsApp do usuário (formato E.164)
+ *         description: Número do WhatsApp do usuário (ex: +5511999998888)
  *     responses:
- *       200:
- *         description: Retorna se o usuário existe ou não
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 exists:
- *                   type: boolean
- *                   example: true
- *       400:
- *         description: Número do WhatsApp não fornecido
- *       500:
- *         description: Erro interno do servidor
+ *       200: { description: Retorna se o usuário existe, schema: { type: object, properties: { exists: { type: boolean } } } }
+ *       400: { description: Número do WhatsApp não fornecido }
+ *       500: { description: Erro interno do servidor }
  */
 router.get('/check-existence', userController.checkUserExistence);
 
@@ -56,48 +45,22 @@ router.get('/check-existence', userController.checkUserExistence);
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - name
- *               - whatsappNumber
- *               - cpf
- *               - dateOfBirth
- *               - photoUrl
+ *             required: [name, whatsappNumber, cpf, dateOfBirth, photoPath, branchId, gender, address]
  *             properties:
- *               name:
- *                 type: string
- *                 example: "João da Silva"
- *               whatsappNumber:
- *                 type: string
- *                 example: "+5511999998888"
- *               cpf:
- *                 type: string
- *                 example: "12345678900"
- *               dateOfBirth:
- *                 type: string
- *                 format: date
- *                 example: "1990-12-31"
- *               photoUrl:
- *                 type: string
- *                 example: "https://example.com/photo.jpg"
- *               gender:
- *                 type: string
- *                 example: "Masculino"
- *               address:
- *                 type: string
- *                 example: "Rua Exemplo, 123, Bairro, Cidade - UF"
+ *               name: { type: string, example: "João da Silva" }
+ *               whatsappNumber: { type: string, example: "+5511999998888" }
+ *               cpf: { type: string, example: "12345678900" }
+ *               dateOfBirth: { type: string, format: date, example: "1990-12-31" }
+ *               photoPath: { type: string, example: "/path/to/photo.jpg or https://..." }
+ *               branchId: { type: integer, example: 1 }
+ *               gender: { type: string, example: "Masculino" }
+ *               address: { type: string, example: "Rua Exemplo, 123" }
+ *               isBlocked: { type: boolean, example: false, description: "(Opcional)" }
  *     responses:
- *       201:
- *         description: Usuário criado com sucesso
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/User' # Referencia um schema User (precisa ser definido)
- *       400:
- *         description: Dados inválidos ou campos obrigatórios faltando
- *       409:
- *         description: Conflito (CPF ou WhatsApp já cadastrado)
- *       500:
- *         description: Erro interno do servidor
+ *       201: { description: Usuário criado, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }
+ *       400: { description: Dados inválidos ou campos obrigatórios faltando / Chave estrangeira inválida }
+ *       409: { description: Conflito (CPF ou WhatsApp já cadastrado) }
+ *       500: { description: Erro interno do servidor }
  */
 router.post('/', userController.createUser);
 
@@ -105,7 +68,7 @@ router.post('/', userController.createUser);
  * @swagger
  * /users/verify:
  *   post:
- *     summary: Verifica a identidade de um usuário (CPF/DataNasc) dado o WhatsApp
+ *     summary: Verifica a identidade (CPF/DataNasc) dado o WhatsApp e retorna dados do usuário
  *     tags: [Users]
  *     requestBody:
  *       required: true
@@ -113,44 +76,122 @@ router.post('/', userController.createUser);
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - whatsappNumber
- *               - cpf
- *               - dateOfBirth
+ *             required: [whatsappNumber, cpf, dateOfBirth]
  *             properties:
- *               whatsappNumber:
- *                 type: string
- *                 example: "+5511999998888"
- *               cpf:
- *                 type: string
- *                 example: "12345678900"
- *               dateOfBirth:
- *                 type: string
- *                 format: date
- *                 example: "1990-12-31"
+ *               whatsappNumber: { type: string, example: "+5511999998888" }
+ *               cpf: { type: string, example: "12345678900" }
+ *               dateOfBirth: { type: string, format: date, example: "1990-12-31" }
  *     responses:
- *       200:
- *         description: Identidade verificada, retorna dados do usuário
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/User' # Referencia um schema User
- *       400:
- *         description: Campos obrigatórios faltando
- *       401:
- *         description: Falha na verificação (CPF ou Data de Nascimento não conferem)
- *       404:
- *         description: Usuário não encontrado para o número de WhatsApp fornecido
- *       500:
- *         description: Erro interno do servidor
+ *       200: { description: Identidade verificada, retorna dados do usuário, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }
+ *       400: { description: Campos obrigatórios faltando }
+ *       401: { description: Falha na verificação (CPF ou Data de Nascimento não conferem) }
+ *       404: { description: Usuário não encontrado para o WhatsApp fornecido }
+ *       500: { description: Erro interno do servidor }
  */
 router.post('/verify', userController.verifyUserIdentity);
 
-// Exporta o router configurado
+// --- New CRUD Routes ---
+
+/**
+ * @swagger
+ * /users:
+ *   get:
+ *     summary: Lista todos os usuários
+ *     tags: [Users]
+ *     parameters:
+ *       - in: query
+ *         name: branchId
+ *         schema:
+ *           type: integer
+ *         required: false
+ *         description: Filtra usuários por ID da filial
+ *     responses:
+ *       200: { description: Lista de usuários, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/User' } } } } }
+ *       500: { description: Erro interno do servidor }
+ */
+router.get('/', userController.getAllUsers);
+
+/**
+ * @swagger
+ * /users/{id}:
+ *   get:
+ *     summary: Obtém um usuário específico pelo ID
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *         description: ID do usuário
+ *     responses:
+ *       200: { description: Dados do usuário, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }
+ *       404: { description: Usuário não encontrado }
+ *       500: { description: Erro interno do servidor }
+ */
+router.get('/:id', userController.getUserById);
+
+/**
+ * @swagger
+ * /users/{id}:
+ *   put:
+ *     summary: Atualiza um usuário existente
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *         description: ID do usuário a ser atualizado
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties: # Somente campos atualizáveis
+ *               name: { type: string }
+ *               dateOfBirth: { type: string, format: date }
+ *               gender: { type: string }
+ *               address: { type: string }
+ *               photoPath: { type: string }
+ *               isBlocked: { type: boolean }
+ *               branchId: { type: integer }
+ *               # Não inclua CPF, whatsappNumber, etc. se não forem atualizáveis
+ *     responses:
+ *       200: { description: Usuário atualizado, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }
+ *       400: { description: Dados inválidos / Chave estrangeira inválida }
+ *       404: { description: Usuário não encontrado }
+ *       500: { description: Erro interno do servidor }
+ */
+router.put('/:id', userController.updateUser);
+
+/**
+ * @swagger
+ * /users/{id}:
+ *   delete:
+ *     summary: Exclui um usuário
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *         description: ID do usuário a ser excluído
+ *     responses:
+ *       204: { description: Usuário excluído com sucesso }
+ *       404: { description: Usuário não encontrado }
+ *       409: { description: Conflito (usuário possui dependências, ex: reservas) }
+ *       500: { description: Erro interno do servidor }
+ */
+router.delete('/:id', userController.deleteUser);
+
+
 module.exports = router;
 
-// --- Definição do Schema User para Swagger (opcional, mas útil) ---
-// Você normalmente colocaria isso em um arquivo de configuração do Swagger
+// --- Add Swagger Schema Definition (move to a central place ideally) ---
 /**
  * @swagger
  * components:
@@ -158,49 +199,22 @@ module.exports = router;
  *     User:
  *       type: object
  *       properties:
- *         id:
- *           type: integer
- *           description: ID único do usuário
- *           example: 1
- *         name:
- *           type: string
- *           description: Nome completo do usuário
- *           example: "Maria Oliveira"
- *         whatsappNumber:
- *           type: string
- *           description: Número do WhatsApp (identificador)
- *           example: "+5521987654321"
- *         cpf:
- *           type: string
- *           description: CPF do usuário
- *           example: "98765432100"
- *         dateOfBirth:
- *           type: string
- *           format: date
- *           description: Data de nascimento
- *           example: "1985-05-15"
- *         gender:
- *           type: string
- *           description: Gênero informado
- *           example: "Feminino"
- *         photoUrl:
- *           type: string
- *           description: URL da foto do usuário
- *           example: "https://example.com/maria.png"
- *         address:
- *           type: string
- *           description: Endereço do usuário
- *           example: "Avenida Principal, 456, Centro, Rio de Janeiro - RJ"
- *         isBlocked:
- *           type: boolean
- *           description: Indica se o usuário está bloqueado
- *           example: false
- *         createdAt:
- *           type: string
- *           format: date-time
- *           description: Data de criação do registro
- *         updatedAt:
- *           type: string
- *           format: date-time
- *           description: Data da última atualização do registro
+ *         id: { type: integer, description: ID único do usuário }
+ *         branchId: { type: integer, description: ID da filial }
+ *         name: { type: string, description: Nome completo }
+ *         whatsappNumber: { type: string, description: Número do WhatsApp }
+ *         cpf: { type: string, description: CPF }
+ *         dateOfBirth: { type: string, format: date, description: Data de nascimento }
+ *         gender: { type: string, description: Gênero }
+ *         address: { type: string, description: Endereço }
+ *         isBlocked: { type: boolean, description: Se está bloqueado }
+ *         photoPath: { type: string, description: Caminho/URL da foto }
+ *         registeredAt: { type: string, format: date-time, description: Data de cadastro }
+ *         lastLoginAt: { type: string, format: date-time, description: Data do último login }
+ *         createdAt: { type: string, format: date-time }
+ *         updatedAt: { type: string, format: date-time }
+ *         branch: { # Exemplo se incluir associação
+ *           type: object,
+ *           properties: { id: { type: integer }, name: { type: string } }
+ *         }
  */
