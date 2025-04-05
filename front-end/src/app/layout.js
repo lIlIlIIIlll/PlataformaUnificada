@@ -2,6 +2,7 @@
 import React from 'react';
 import { AntdRegistry } from '@ant-design/nextjs-registry';
 import AntdLayout from './components/AntdLayout'; // <-- Import the client wrapper component
+import './styles/global.css'
 
 export default function RootLayout({ children }) {
   return (

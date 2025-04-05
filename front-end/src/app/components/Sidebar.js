@@ -1,23 +1,22 @@
 // components/Sidebar.js
-"use client"; // Add this if Sidebar uses hooks or event handlers indirectly via Menu
+"use client"; // Necessário para hooks como usePathname
 
 import React from 'react';
-import { Menu } from 'antd'; // Only import Menu, not Layout or Sider
+import { Menu } from 'antd'; // Importa o componente Menu do Ant Design
 import {
-  DashboardOutlined,
-  TeamOutlined,
-  ProjectOutlined,
-  CalendarOutlined,
-  ReadOutlined, // Assuming this is Training
-  ClockCircleOutlined,
-  BarChartOutlined,
-  SettingOutlined,
-  QuestionCircleOutlined,
-} from '@ant-design/icons';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation'; // Import usePathname
+  DashboardOutlined,  // Ícone para Dashboard
+  CalendarOutlined,   // Ícone para Reservas
+  LockOutlined,       // Ícone para Armários
+  UserOutlined,       // Ícone para Clientes (alternativa: TeamOutlined)
+  BarChartOutlined,   // Ícone para Relatórios
+  SettingOutlined,    // Ícone para Administração
+  // TeamOutlined,    // Ícone alternativo para Clientes
+  // AuditOutlined,   // Ícone alternativo para Logs/Relatórios
+} from '@ant-design/icons'; // Importa os ícones necessários
+import Link from 'next/link'; // Importa Link para navegação no Next.js
+import { usePathname } from 'next/navigation'; // Hook para obter o caminho atual
 
-// Helper function to create menu items
+// Função auxiliar para criar itens de menu no formato esperado pelo Ant Design
 function getItem(label, key, icon, children) {
   return {
     key,
@@ -28,36 +27,48 @@ function getItem(label, key, icon, children) {
 }
 
 const Sidebar = () => {
-  const pathname = usePathname(); // Get the current path
+  const pathname = usePathname(); // Obtém o caminho da URL atual
 
-  // Define menu items using the recommended 'items' prop structure
+  // Define os itens do menu com base na estrutura solicitada
+  // O 'key' de cada item deve corresponder ao 'href' do Link para que o item ativo seja destacado
   const menuItems = [
     getItem(<Link href="/dashboard">Dashboard</Link>, '/dashboard', <DashboardOutlined />),
-    getItem(<Link href="/people">People</Link>, '/people', <TeamOutlined />),
-    getItem(<Link href="/projects">Projects</Link>, '/projects', <ProjectOutlined />),
-    getItem(<Link href="/calendar">Calendar</Link>, '/calendar', <CalendarOutlined />),
-    getItem(<Link href="/training">Training</Link>, '/training', <ReadOutlined />),
-    getItem(<Link href="/timesheet">Timesheet</Link>, '/timesheet', <ClockCircleOutlined />),
-    getItem(<Link href="/reports">Reports</Link>, '/reports', <BarChartOutlined />),
-    getItem(<Link href="/administration">Administration</Link>, '/administration', <SettingOutlined />),
-    getItem(<Link href="/help">Help</Link>, '/help', <QuestionCircleOutlined />),
-    // Add more items or submenus as needed following this pattern
+    getItem(<Link href="/reservas">Gerenciamento de Reservas</Link>, '/reservas', <CalendarOutlined />),
+    getItem(<Link href="/armarios">Armários</Link>, '/armarios', <LockOutlined />),
+    getItem(<Link href="/clientes">Clientes</Link>, '/clientes', <UserOutlined />), // ou <TeamOutlined />
+    getItem(<Link href="/relatorios">Relatórios & Logs</Link>, '/relatorios', <BarChartOutlined />), // ou <AuditOutlined />
+    getItem(<Link href="/admin">Administração</Link>, '/administracao', <SettingOutlined />),
+    // Adicione mais itens se necessário seguindo este padrão
   ];
 
-  // Determine the selected key based on the current pathname
-  // Find the item whose key matches the current path
+  // Determina a chave selecionada com base no pathname atual
+  // Encontra o item cujo 'key' corresponde exatamente ao caminho atual
   const currentSelectedItem = menuItems.find(item => item.key === pathname);
-  const selectedKeys = currentSelectedItem ? [currentSelectedItem.key] : [];
+
+  // Se não encontrar uma correspondência exata, tenta encontrar uma correspondência inicial
+  // Útil se você tiver sub-rotas como /clientes/123 e quiser manter /clientes selecionado
+  let selectedKeys = [];
+  if (currentSelectedItem) {
+      selectedKeys = [currentSelectedItem.key];
+  } else {
+      // Lógica opcional para sub-rotas: encontra o item cujo 'key' é o início do pathname
+      const parentItem = menuItems.find(item => pathname.startsWith(item.key + '/') && item.key !== '/dashboard'); // Evita match parcial em '/'
+      if (parentItem) {
+          selectedKeys = [parentItem.key];
+      } else if (pathname === '/') { // Caso especial para a raiz, seleciona o dashboard
+          selectedKeys = ['/dashboard'];
+      }
+  }
 
 
   return (
-    // Remove the Sider component from here - it's handled in AntdLayout.js
+    // O componente Sider pai (em AntdLayout.js ou similar) define a largura e o layout
     <Menu
-      theme="light" // Match theme from AntdLayout Sider if needed
-      mode="inline"
-      selectedKeys={selectedKeys} // Use dynamically selected keys
-      style={{ height: '100%', borderRight: 0, borderRadius:'8px' }}
-      items={menuItems} // Pass the array to the 'items' prop
+      theme="light"             // Tema do menu (pode ser 'dark')
+      mode="inline"             // Modo de exibição (vertical)
+      selectedKeys={selectedKeys} // Chaves dos itens atualmente selecionados (para destaque)
+      style={{ height: '100%', borderRight: 0, borderRadius: '8px' }} // Estilo básico
+      items={menuItems}         // Array de itens do menu
     />
   );
 };

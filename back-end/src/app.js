@@ -1,6 +1,7 @@
 // src/app.js
 const express = require('express');
 const db = require('./index'); // Ensure this initializes models and associations
+const cors = require('cors'); 
 
 // Import Routes
 const userRoutes = require('./features/users/user.routes');
@@ -10,9 +11,12 @@ const lockerRoutes = require('./features/lockers/locker.routes');
 const reservationRoutes = require('./features/reservations/locker_reservation.routes');
 const paymentRoutes = require('./features/payments/payment.routes');
 const settingRoutes = require('./features/settings/setting.routes');
+const whatsappRoutes = require('./features/whatsapp/whatsappRoutes');
 // Import other routes as needed
 
 const app = express();
+
+app.use(cors())
 
 // Middlewares essenciais
 app.use(express.json()); // Para parsear JSON no corpo das requisições
@@ -28,6 +32,8 @@ app.use(`${API_PREFIX}/lockers`, lockerRoutes);
 app.use(`${API_PREFIX}/reservations`, reservationRoutes);
 app.use(`${API_PREFIX}/payments`, paymentRoutes);
 app.use(`${API_PREFIX}/settings`, settingRoutes);
+app.use(`${API_PREFIX}/whatsapp`, whatsappRoutes);
+
 // Mount other routes
 
 // Simple Root Route for health check or info

@@ -12,10 +12,14 @@
   "type": "commonjs",
   "dependencies": {
     "bcrypt": "^5.1.1",
+    "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "jwt-token": "^1.0.9",
+    "openai": "^4.91.1",
+    "qrcode": "^1.5.4",
     "sequelize": "^6.37.6",
-    "sqlite3": "^5.1.7"
+    "sqlite3": "^5.1.7",
+    "whatsapp-web.js": "^1.27.0"
   }
 }
