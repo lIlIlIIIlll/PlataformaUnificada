@@ -1,7 +1,7 @@
 // src/app.js
 const express = require('express');
 const db = require('./index'); // Ensure this initializes models and associations
-const cors = require('cors'); 
+const cors = require('cors');
 
 // Import Routes
 const userRoutes = require('./features/users/user.routes');
@@ -14,9 +14,15 @@ const settingRoutes = require('./features/settings/setting.routes');
 const whatsappRoutes = require('./features/whatsapp/whatsappRoutes');
 // Import other routes as needed
 
+// --- IMPORTANTE: Importar o Model e a Config de Seeding ---
+const { Setting } = db; // Acessa o modelo Setting inicializado em db
+const permanentSettingsConfig = require('./config/permanentSettings.config'); // Importa a config centralizada
+const DEFAULT_SETTINGS_DATA = permanentSettingsConfig.defaults; // Pega os dados padrão para seeding
+// --- FIM DAS IMPORTAÇÕES ---
+
 const app = express();
 
-app.use(cors())
+app.use(cors());
 
 // Middlewares essenciais
 app.use(express.json()); // Para parsear JSON no corpo das requisições
@@ -60,13 +66,15 @@ app.use((err, req, res, next) => {
     message = `Erro de duplicação: ${err.errors.map(e => e.message).join(', ')}`;
   } else if (err.name === 'SequelizeForeignKeyConstraintError') {
       statusCode = 400; // Or 409 depending on context
-      // You might need more logic to determine *which* foreign key failed
       message = 'Erro de referência: Um registro relacionado não foi encontrado.';
   } else if (err.status) {
     // If the error has a specific status code attached
     statusCode = err.status;
     message = err.message;
-  } else if (err.message.includes('Não foi possível')) { // Catch custom service errors
+  } else if (err.message.includes('permanente e não pode ser excluída')) { // Captura erro específico do service
+      statusCode = 403; // Forbidden - Ação não permitida por ser permanente
+      message = err.message;
+  } else if (err.message.includes('Não foi possível')) { // Catch other custom service errors
      statusCode = 500; // Or maybe 400 depending on the error context
      message = err.message;
   }
@@ -76,14 +84,48 @@ app.use((err, req, res, next) => {
 });
 
 
+// --- Função para criar configurações padrão se não existirem (usando config centralizada) ---
+const seedDefaultSettings = async () => {
+    console.log('Verificando/Criando configurações padrão...');
+    try {
+        // Itera sobre os dados padrão importados do arquivo de configuração
+        for (const settingData of DEFAULT_SETTINGS_DATA) {
+            const [setting, created] = await Setting.findOrCreate({
+                where: { name: settingData.name },
+                defaults: {
+                    value: settingData.value,
+                    description: settingData.description,
+                },
+            });
+
+            if (created) {
+                console.log(`- Configuração padrão '${setting.name}' criada.`);
+            }
+            // Opcional: loggar se já existia
+            // else { console.log(`- Configuração padrão '${setting.name}' já existe.`); }
+        }
+        console.log('Verificação de configurações padrão concluída.');
+    } catch (error) {
+        console.error('Erro durante o seeding das configurações padrão:', error);
+        // Decide se quer parar a aplicação ou apenas logar o erro
+        // throw error; // Descomente se quiser que um erro no seeding pare a inicialização
+    }
+};
+
+
 // --- Server Initialization ---
 const PORT = process.env.PORT || 3009;
 
 console.log("Tentando sincronizar com banco de dados...");
 
 db.SQ.sync() // Use the instance from db object
-  .then(() => {
+  .then(async () => { // Tornar o callback async para usar await no seeding
     console.log("Banco de Dados sincronizado com sucesso!");
+
+    // --- Executar Seeding das Configurações ---
+    await seedDefaultSettings();
+    // --- Fim do Seeding ---
+
     app.listen(PORT, () => {
       console.log(`Servidor rodando na porta ${PORT}`);
     });

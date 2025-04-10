@@ -2,6 +2,13 @@
 const { Setting } = require('../../index'); // Import necessary model
 const { Op } = require('sequelize');
 
+// --- IMPORTAR CONFIGURAÇÕES PERMANENTES ---
+// Importa o Set com os nomes das configurações permanentes do arquivo centralizado
+const permanentSettingsConfig = require('../../config/permanentSettings.config'); // Ajuste o caminho se necessário
+const PERMANENT_SETTINGS_NAMES = permanentSettingsConfig.names;
+// --- FIM DA IMPORTAÇÃO ---
+
+
 /**
  * Creates a new setting.
  * @param {object} settingData - Data for the new setting.
@@ -136,7 +143,9 @@ const updateSettingByName = async (name, updateData) => {
             allowedUpdates.value = updateData.value;
         }
         if (updateData.description !== undefined) {
-            allowedUpdates.description = updateData.description === '' ? null : updateData.description; // Set null if empty string? Or keep empty? Decide based on needs.
+            // Handle setting description to null explicitly if an empty string is passed,
+            // or keep it as empty string if that's desired. Here, setting to null.
+            allowedUpdates.description = updateData.description === '' ? null : updateData.description;
         }
 
         if (Object.keys(allowedUpdates).length === 0) {
@@ -158,11 +167,20 @@ const updateSettingByName = async (name, updateData) => {
 
 /**
  * Deletes a setting by its name.
+ * Checks if the setting is permanent before deleting by consulting the imported config.
  * @param {string} name - The unique name (key) of the setting to delete.
  * @returns {Promise<boolean>} - True if deleted, false if not found.
+ * @throws {Error} - If the setting is permanent and cannot be deleted.
  */
 const deleteSettingByName = async (name) => {
     if (!name) return false;
+
+    // --- VERIFICAÇÃO DE CONFIGURAÇÃO PERMANENTE (Usando config centralizada) ---
+    if (PERMANENT_SETTINGS_NAMES.has(name)) {
+        throw new Error(`Configuração '${name}' é permanente e não pode ser excluída.`);
+    }
+    // --- FIM DA VERIFICAÇÃO ---
+
     try {
         const setting = await Setting.findOne({ where: { name } });
         if (!setting) {
@@ -171,6 +189,10 @@ const deleteSettingByName = async (name) => {
         await setting.destroy();
         return true;
     } catch (error) {
+        // If the error was thrown by the permanent check, re-throw it
+        if (error.message.includes('permanente e não pode ser excluída')) {
+            throw error;
+        }
         // Foreign key constraints are unlikely for settings table itself
         console.error(`Erro ao deletar configuração (${name}):`, error);
         throw new Error('Erro interno ao deletar configuração.');
