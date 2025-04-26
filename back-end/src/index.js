@@ -5,11 +5,12 @@ const SQ = require('./config/database'); // Importa a instância da conexão
 // Import model initializers
 const UserInit = require('./features/users/user.model');
 const BranchInit = require('./features/branches/branch.model');
-const AdministratorInit = require('./features/administrators/administrator.model'); // Adjust path if needed
+const AdministratorInit = require('./features/administrators/administrator.model');
 const LockerInit = require('./features/lockers/locker.model');
 const LockerReservationInit = require('./features/reservations/locker_reservation.model');
 const PaymentInit = require('./features/payments/payment.model');
 const SettingInit = require('./features/settings/setting.model');
+const HikvisionInit = require('./features/hikvision/hikvision.model'); // <<< NOVO IMPORT
 
 // Initialize models
 const db = {};
@@ -20,11 +21,13 @@ db.Locker = LockerInit(SQ);
 db.LockerReservation = LockerReservationInit(SQ);
 db.Payment = PaymentInit(SQ);
 db.Setting = SettingInit(SQ);
+db.Hikvision = HikvisionInit(SQ); // <<< NOVO MODEL INICIALIZADO
 
 // IMPORTANT: Setup Associations AFTER all models are initialized
 console.log("Running model associations...");
 Object.keys(db).forEach(modelName => {
-  if (db[modelName].associate) {
+  // Verifica se o modelo existe e tem o método associate antes de chamar
+  if (db[modelName] && db[modelName].associate) {
     console.log(`- Associating ${modelName}`);
     db[modelName].associate(db);
   }

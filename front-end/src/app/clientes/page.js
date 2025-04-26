@@ -22,7 +22,7 @@ import {
     Col,
     Avatar,
     Popconfirm,
-    ConfigProvider
+    ConfigProvider,
 } from 'antd';
 import {
     PlusOutlined,
@@ -32,7 +32,8 @@ import {
     SearchOutlined,
     ClearOutlined,
     UserOutlined,
-    QuestionCircleOutlined
+    QuestionCircleOutlined,
+    CloseCircleOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import 'dayjs/locale/pt-br';
@@ -393,6 +394,26 @@ const UsersPage = () => {
 
     // --- Definição das Colunas da Tabela ---
     const columns = [
+        {
+            title: 'Cadastro Hikvision',    // Título da coluna
+            dataIndex: 'employeeNo',         // Campo do objeto de dados a ser verificado/exibido
+            key: 'employeeNo',               // Chave única da coluna
+            width: 100,                      // Largura aumentada para acomodar o ID longo
+            align: 'center',                 // Alinhamento do conteúdo (pode preferir 'left' para strings longas)
+            render: (employeeNoValue) => { // Função de renderização customizada
+              // employeeNoValue: O valor do campo 'employeeNo' para a linha atual
+              // record: O objeto de dados completo para a linha atual
+        
+              // Verifica se employeeNoValue existe e não é uma string vazia
+              if (employeeNoValue) {
+                // Se existir, renderiza o próprio valor do employeeNo como texto
+                return employeeNoValue;
+              } else {
+                // Se for null, undefined ou string vazia, renderiza o ícone "X" (Close)
+                return <CloseCircleOutlined style={{ color: 'red', fontSize: '18px' }} title="Não cadastrado na Hikvision" />;
+              }
+            },
+        },
         {
             title: 'Foto', dataIndex: 'photoPath', key: 'photo', width: 60, align: 'center',
             render: (path, record) => <Avatar src={path || undefined} icon={<UserOutlined />} alt={record.name} />

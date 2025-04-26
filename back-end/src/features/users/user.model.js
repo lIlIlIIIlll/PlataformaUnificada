@@ -42,6 +42,14 @@ module.exports = (sequelize) => {
         },
         comment: 'ID da filial à qual o usuário pertence.',
     },
+    // --- Hikvision Employee Number ---
+    employeeNo: {
+      type: DataTypes.STRING, // Hikvision expects a string identifier
+      allowNull: true,       // Permitir nulo se o usuário ainda não foi sincronizado ou se o ID não é mandatório inicialmente
+      unique: true,          // Deve ser único se usado como identificador no sistema Hikvision
+      comment: 'ID único do usuário no sistema Hikvision (Person ID / EmployeeNo). Pode ser CPF, UUID, ID interno, etc.',
+    },
+    // --- User Details ---
     name: {
       type: DataTypes.TEXT, // Match SQL
       allowNull: false,

@@ -1,7 +1,8 @@
 // --- Importações ---
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const { OpenAI } = require('openai'); // Importa OpenAI
-const userService = require('../users/user.services')
+const userService = require('../users/user.services');
+const uploadService = require('../uploads/upload.service'); // <<< ADICIONADO: Importa o serviço de upload
 
 // --- Configuração OpenAI ---
 const openai = new OpenAI({
@@ -9,92 +10,82 @@ const openai = new OpenAI({
 });
 const assistantId = "asst_w7MdrgBxinVyfrmvZIyv5Vg0";
 
-if (!process.env.OPENAI_API_KEY || !process.env.OPENAI_ASSISTANT_ID) {
-    console.error("ERRO: Variáveis de ambiente OPENAI_API_KEY ou OPENAI_ASSISTANT_ID não definidas.");
-    // Considerar sair do processo ou desabilitar a funcionalidade do bot
-    // process.exit(1);
-}
+// <<< MODIFICADO: Removida a verificação de variável de ambiente aqui, pois você passou a chave diretamente
+// if (!process.env.OPENAI_API_KEY || !process.env.OPENAI_ASSISTANT_ID) {
+//     console.error("ERRO: Variáveis de ambiente OPENAI_API_KEY ou OPENAI_ASSISTANT_ID não definidas.");
+//     // Considerar sair do processo ou desabilitar a funcionalidade do bot
+//     // process.exit(1);
+// }
 
 // --- Estado do WhatsApp Client ---
 let clientInstance = null;
 let isInitializing = false;
 
 // --- Mapeamento de Chat WhatsApp para Thread OpenAI ---
-// Guarda o ID da Thread OpenAI para cada chat do WhatsApp
-// ATENÇÃO: Isso é armazenado em memória. Se o servidor reiniciar, os históricos serão perdidos.
-// Para persistência, armazene isso em um banco de dados.
 const chatThreadMap = {};
 
-// --- Funções de Ferramenta Locais (Exemplos) ---
-// Mapeie os nomes das funções DEFINIDAS NO SEU ASSISTANT para funções JS aqui.
-// Estas funções serão chamadas quando o assistente indicar 'requires_action'.
-// --- Funções de Ferramenta Locais (Mapeadas para userService) ---
+// --- Funções de Ferramenta Locais (Mapeadas para os Services) ---
 const availableTools = {
-    // Mapeia 'find_user_by_whatsapp' (OpenAI) para userService.findUserByWhatsapp
+    // Funções do userService (mantidas como antes)
     find_user_by_whatsapp: async ({ whatsapp_number }) => {
         console.log(`>>> [TOOL CALL] Executando: userService.findUserByWhatsapp com número: ${whatsapp_number}`);
         try {
-            const user = await userService.findUserByWhatsapp(whatsapp_number);
+            const user = await userService.findUserByWhatsapp(whatsapp_number); // <<< CORRIGIDO: nome da função no service é findUserByWhatsapp
             if (!user) {
                 console.log(`>>> [TOOL RESULT] Usuário não encontrado para ${whatsapp_number}`);
                 return JSON.stringify({ message: `Usuário com WhatsApp ${whatsapp_number} não encontrado.` });
             }
             console.log(`>>> [TOOL RESULT] Usuário encontrado: ${user.id}`);
-            // Retorna o resultado como uma STRING JSON
-            // Remova dados sensíveis se necessário antes de retornar para a IA
-            const { password, ...userData } = user.get({ plain: true }); // Exemplo de remoção de senha
+            const { password, ...userData } = user.get({ plain: true });
             return JSON.stringify(userData);
         } catch (error) {
             console.error("<<< [TOOL ERROR] Erro em find_user_by_whatsapp:", error);
-            // Retorna a mensagem de erro específica do service, se houver
             return JSON.stringify({ error: error.message || "Erro interno ao buscar usuário por WhatsApp." });
         }
     },
-
-    // Mapeia 'verifyIdentityAndGetData' (OpenAI) para userService.verifyIdentityAndGetData
-    verifyIdentityAndGetData: async ({ whatsappNumber, cpf, dateOfBirth }) => {
-        console.log(`>>> [TOOL CALL] Executando: userService.verifyIdentityAndGetData para WhatsApp: ${whatsappNumber}`);
+    verifyIdentityAndGetData: async ({ whatsapp_number: whatsappNumber, cpf, dateOfBirth }) => { // <<< CORRIGIDO AQUI (Renomeia whatsapp_number)
+        // <<< MELHORIA: Log mais completo dos args recebidos >>>
+        console.log(`>>> [TOOL CALL] Executando: userService.verifyIdentityAndGetData para WhatsApp: ${whatsappNumber} com CPF: ${cpf} e DataNasc: ${dateOfBirth}`);
         try {
+            // <<< ADICIONADO: Validação dos argumentos recebidos >>>
+            if (!whatsappNumber || !cpf || !dateOfBirth) {
+                 console.error("<<< [TOOL ERROR] Argumentos faltando para verifyIdentityAndGetData:", { whatsappNumber, cpf, dateOfBirth });
+                 // Retorna erro informando qual dado faltou (útil para OpenAI)
+                 throw new Error("Faltam informações necessárias (WhatsApp, CPF ou Data de Nascimento) para verificar a identidade. Por favor, peça ao usuário.");
+            }
+
             // Assegura que a data esteja no formato YYYY-MM-DD
-            const formattedDate = dateOfBirth.split('T')[0]; // Pega apenas a parte da data
+            // A validação acima garante que dateOfBirth não é undefined aqui
+            const formattedDate = dateOfBirth.split('T')[0];
             const user = await userService.verifyIdentityAndGetData(whatsappNumber, cpf, formattedDate);
+
             console.log(`>>> [TOOL RESULT] Identidade verificada para usuário: ${user.id}`);
             const { password, ...userData } = user.get({ plain: true });
             return JSON.stringify(userData);
         } catch (error) {
             console.error("<<< [TOOL ERROR] Erro em verifyIdentityAndGetData:", error);
-            // Erros como 'Usuário não encontrado' ou 'CPF/Data inválidos' serão retornados aqui
+            // Retorna a mensagem de erro original, que pode ser a validação acima ou erro do service
             return JSON.stringify({ error: error.message || "Erro interno durante a verificação de identidade." });
         }
     },
-
-    // Mapeia 'create_user' (OpenAI) para userService.createUser
     create_user: async (userDataFromOpenAI) => {
-        // O objeto recebido já deve ter a estrutura correta definida nos parâmetros da OpenAI
         console.log(`>>> [TOOL CALL] Executando: userService.createUser com dados:`, userDataFromOpenAI);
         try {
-             // Garante que isBlocked tenha um valor default se não vier
-             const creationData = {
+            const creationData = {
                 ...userDataFromOpenAI,
                 isBlocked: userDataFromOpenAI.isBlocked ?? false,
-                dateOfBirth: userDataFromOpenAI.dateOfBirth.split('T')[0] // Garante YYYY-MM-DD
-             };
-
+                dateOfBirth: userDataFromOpenAI.dateOfBirth.split('T')[0]
+            };
             const newUser = await userService.createUser(creationData);
             console.log(`>>> [TOOL RESULT] Novo usuário criado com ID: ${newUser.id}`);
             const { password, ...userData } = newUser.get({ plain: true });
             return JSON.stringify(userData);
         } catch (error) {
             console.error("<<< [TOOL ERROR] Erro em create_user:", error);
-            // Erros como 'CPF já cadastrado', 'WhatsApp já cadastrado', validações, FK, etc.
             return JSON.stringify({ error: error.message || "Erro interno ao criar usuário." });
         }
     },
-
-    // Mapeia 'find_all_users' (OpenAI) para userService.findAllUsers
-    find_all_users: async ({ branchId }) => {
-        // Nota: O schema OpenAI marcou branchId como string e required, o que pode não ser ideal.
-        // O service espera um objeto de opções com branchId numérico opcional.
+     find_all_users: async ({ branchId }) => {
         console.log(`>>> [TOOL CALL] Executando: userService.findAllUsers com branchId: ${branchId || 'Todos'}`);
         try {
             const options = {};
@@ -104,13 +95,10 @@ const availableTools = {
                     options.branchId = numericBranchId;
                 } else {
                     console.warn(`<<< [TOOL WARN] branchId inválido recebido (${branchId}), buscando todos os usuários.`);
-                    // Poderia retornar um erro se o ID da filial for obrigatório no contexto da IA
-                    // return JSON.stringify({ error: `Formato de branchId inválido: ${branchId}` });
                 }
             }
             const users = await userService.findAllUsers(options);
             console.log(`>>> [TOOL RESULT] Encontrados ${users.length} usuários.`);
-            // O service já exclui alguns campos, mas podemos garantir aqui também
             const safeUsers = users.map(u => {
                 const { password, ...userData } = u.get({ plain: true });
                 return userData;
@@ -121,18 +109,13 @@ const availableTools = {
             return JSON.stringify({ error: error.message || "Erro interno ao buscar todos os usuários." });
         }
     },
-
-    // Mapeia 'update_user' (OpenAI) para userService.updateUser
     update_user: async ({ id, userData }) => {
         console.log(`>>> [TOOL CALL] Executando: userService.updateUser para ID: ${id} com dados:`, userData);
         try {
-             // O service já impede a atualização de campos como ID, CPF, etc.
-             // Podemos validar aqui se o objeto userData não está vazio.
-             if (Object.keys(userData).length === 0) {
-                 return JSON.stringify({ error: "Nenhum dado fornecido para atualização." });
+             if (!userData || typeof userData !== 'object' || Object.keys(userData).length === 0) { // Verifica se userData é um objeto válido e não vazio
+                 return JSON.stringify({ error: "Nenhum dado válido fornecido para atualização." });
              }
 
-             // Garante formato de data se houver
              if (userData.dateOfBirth) {
                  userData.dateOfBirth = userData.dateOfBirth.split('T')[0];
              }
@@ -151,35 +134,53 @@ const availableTools = {
         }
     },
 
-    // Adicione aqui mapeamentos para outras funções que o assistente possa chamar
-    // Exemplo: Se você adicionar a função delete_user ao assistente:
-    /*
-    delete_user: async ({ id }) => {
-        console.log(`>>> [TOOL CALL] Executando: userService.deleteUser para ID: ${id}`);
+    // <<< ADICIONADO: Mapeamento para a função de salvar imagem >>>
+    save_image_buffer: async ({ fileBuffer, originalFilename, mimetype }) => {
+        console.log(`>>> [TOOL CALL] Executando: uploadService.saveImageBuffer para: ${originalFilename} (Mime: ${mimetype})`);
         try {
-            const deleted = await userService.deleteUser(id);
-            if (deleted) {
-                 console.log(`>>> [TOOL RESULT] Usuário ${id} deletado.`);
-                return JSON.stringify({ success: true, message: `Usuário ${id} deletado com sucesso.` });
-            } else {
-                 console.log(`>>> [TOOL RESULT] Usuário ${id} não encontrado para deleção.`);
-                return JSON.stringify({ success: false, message: `Usuário com ID ${id} não encontrado.` });
+            // Validação básica dos argumentos recebidos da OpenAI
+            if (!fileBuffer || typeof fileBuffer !== 'string') {
+                 throw new Error("Argumento 'fileBuffer' inválido ou faltando (esperado string base64).");
             }
+            if (!originalFilename || typeof originalFilename !== 'string') {
+                 throw new Error("Argumento 'originalFilename' inválido ou faltando.");
+            }
+            if (!mimetype || typeof mimetype !== 'string') {
+                 throw new Error("Argumento 'mimetype' inválido ou faltando.");
+            }
+
+            // Converter a string base64 recebida da OpenAI para um Buffer Node.js
+            let imageBuffer;
+            try {
+                // Tenta remover um possível prefixo data URL (ex: "data:image/jpeg;base64,")
+                const base64Data = fileBuffer.split(';base64,').pop();
+                imageBuffer = Buffer.from(base64Data, 'base64');
+            } catch (bufferError) {
+                console.error("<<< [TOOL ERROR] Erro ao decodificar base64:", bufferError);
+                throw new Error("O 'fileBuffer' fornecido não é uma string base64 válida.");
+            }
+
+            // Chama o serviço de upload com o buffer decodificado
+            const savedFileInfo = await uploadService.saveImageBuffer(
+                imageBuffer,
+                originalFilename,
+                mimetype
+            );
+
+            console.log(`>>> [TOOL RESULT] Imagem salva via service: ${savedFileInfo.fileName}`);
+            // Retorna as informações do arquivo salvo para a OpenAI como string JSON
+            return JSON.stringify(savedFileInfo);
+
         } catch (error) {
-            console.error(`<<< [TOOL ERROR] Erro em delete_user (${id}):`, error);
-             // O service lança o erro original em caso de FK constraint
-             if (error.name === 'SequelizeForeignKeyConstraintError') {
-                 return JSON.stringify({ error: "Não é possível deletar o usuário pois ele possui registros associados (ex: reservas)." });
-             }
-            return JSON.stringify({ error: error.message || "Erro interno ao deletar usuário." });
+            console.error("<<< [TOOL ERROR] Erro durante save_image_buffer:", error);
+            // Retorna a mensagem de erro para a OpenAI como string JSON
+            return JSON.stringify({ error: error.message || "Erro interno desconhecido ao salvar a imagem." });
         }
-    }
-    */
+    },
 };
 
-// --- Funções Auxiliares OpenAI ---
+// --- Funções Auxiliares OpenAI (getOrCreateThread, processRun - Mantidas como antes) ---
 
-// Função para obter ou criar uma Thread OpenAI para um chat WhatsApp
 const getOrCreateThread = async (chatId) => {
     if (chatThreadMap[chatId]) {
         console.log(`Thread existente encontrada para ${chatId}: ${chatThreadMap[chatId]}`);
@@ -193,26 +194,23 @@ const getOrCreateThread = async (chatId) => {
             return thread.id;
         } catch (error) {
             console.error(`Erro ao criar thread para ${chatId}:`, error);
-            throw new Error("Não foi possível iniciar uma conversa."); // Lança erro para ser pego no handler da msg
+            throw new Error("Não foi possível iniciar uma conversa.");
         }
     }
 };
 
-// Função para processar a execução (run) do assistente e esperar o resultado
 const processRun = async (threadId, runId, chatId) => {
     try {
         let run = await openai.beta.threads.runs.retrieve(threadId, runId);
 
-        // Polling para esperar a conclusão ou ação requerida
         while (['queued', 'in_progress', 'cancelling'].includes(run.status)) {
-            await new Promise(resolve => setTimeout(resolve, 1500)); // Espera 1.5 segundos
+            await new Promise(resolve => setTimeout(resolve, 1500));
             console.log(`[${chatId}] Run status: ${run.status}`);
             run = await openai.beta.threads.runs.retrieve(threadId, runId);
         }
 
         console.log(`[${chatId}] Run final status: ${run.status}`);
 
-        // --- CASO 1: Ação Requerida (Chamada de Função) ---
         if (run.status === 'requires_action') {
             console.log(`[${chatId}] Run requer ação (chamada de função).`);
             const toolOutputs = [];
@@ -227,16 +225,19 @@ const processRun = async (threadId, runId, chatId) => {
 
                 if (availableTools[functionName]) {
                     try {
-                        // Chama a função local correspondente
+                        // Chama a função local correspondente (agora inclui save_image_buffer)
                         const output = await availableTools[functionName](functionArgs);
-                        console.log(`[${chatId}] -> Resultado da ferramenta ${functionName}:`, output);
+                        console.log(`[${chatId}] -> Resultado da ferramenta ${functionName} (Output Type: ${typeof output}):`, output);
+
+                        // Garante que o output seja uma string
+                        const outputString = typeof output === 'string' ? output : JSON.stringify(output);
+
                         toolOutputs.push({
                             tool_call_id: toolCallId,
-                            output: output, // O output DEVE ser uma string
+                            output: outputString, // Garante que seja string
                         });
                     } catch (toolError) {
                         console.error(`[${chatId}] Erro ao executar ferramenta ${functionName}:`, toolError);
-                        // Informa erro para o assistente (opcional)
                         toolOutputs.push({
                             tool_call_id: toolCallId,
                             output: JSON.stringify({ error: `Erro interno ao executar ${functionName}: ${toolError.message}` })
@@ -244,7 +245,6 @@ const processRun = async (threadId, runId, chatId) => {
                     }
                 } else {
                     console.warn(`[${chatId}] Ferramenta ${functionName} não encontrada localmente.`);
-                    // Informa que a função não existe
                     toolOutputs.push({
                         tool_call_id: toolCallId,
                         output: JSON.stringify({ error: `Função ${functionName} não disponível.` })
@@ -252,51 +252,48 @@ const processRun = async (threadId, runId, chatId) => {
                 }
             }
 
-            // Submete os resultados das ferramentas de volta para a OpenAI
             if (toolOutputs.length > 0) {
                  console.log(`[${chatId}] Submetendo ${toolOutputs.length} resultados de ferramentas...`);
+                 // Log para verificar o que está sendo enviado
+                 console.log('Outputs a serem submetidos:', JSON.stringify(toolOutputs, null, 2));
+
                  await openai.beta.threads.runs.submitToolOutputs(threadId, run.id, {
                      tool_outputs: toolOutputs,
                  });
-                 // Chama recursivamente para continuar o processamento após submeter
                  return processRun(threadId, run.id, chatId);
             } else {
                  console.warn(`[${chatId}] Nenhuma ferramenta pôde ser executada ou encontrada.`);
-                 // Você pode querer cancelar o run ou enviar uma mensagem de erro aqui
                  await openai.beta.threads.runs.cancel(threadId, run.id);
                  throw new Error("Nenhuma ferramenta necessária pôde ser executada.");
             }
 
-        // --- CASO 2: Run Concluído ---
         } else if (run.status === 'completed') {
             console.log(`[${chatId}] Run concluído. Buscando mensagens...`);
-            const messages = await openai.beta.threads.messages.list(threadId, { limit: 1 }); // Pega só a última
+            const messages = await openai.beta.threads.messages.list(threadId, { limit: 1 });
             const lastMessage = messages.data[0];
 
             if (lastMessage && lastMessage.role === 'assistant' && lastMessage.content[0]?.type === 'text') {
                  const assistantResponse = lastMessage.content[0].text.value;
                  console.log(`[${chatId}] Resposta do Assistente: ${assistantResponse}`);
-                 return assistantResponse; // Retorna a resposta final
+                 return assistantResponse;
             } else {
                  console.warn(`[${chatId}] Run completo, mas sem resposta válida do assistente encontrada.`);
                  throw new Error("O assistente concluiu mas não forneceu uma resposta.");
             }
 
-        // --- CASO 3: Run Falhou ou Expirou ---
         } else {
             console.error(`[${chatId}] Run falhou ou status inesperado: ${run.status}`);
-            console.error('Detalhes do Run:', run); // Loga todo o objeto run para debug
+            console.error('Detalhes do Run:', run);
             throw new Error(`A conversa com o assistente falhou (Status: ${run.status}). Último erro: ${run.last_error?.message || 'N/A'}`);
         }
 
     } catch (error) {
         console.error(`[${chatId}] Erro durante processamento do Run ${runId}:`, error);
-        throw error; // Re-lança o erro para ser pego no handler da mensagem
+        throw error;
     }
 };
 
-
-// --- Controller WhatsApp (Modificado) ---
+// --- Controller WhatsApp (Funções de inicialização e listeners - Mantidas como antes) ---
 
 const destroyClient = async () => {
     if (clientInstance) {
@@ -312,10 +309,7 @@ const destroyClient = async () => {
     }
 };
 
-const getNewWhatsAppSession = async (req, res, next) => { // Adicionado 'next' para possível error handling
-    // if (!process.env.OPENAI_API_KEY || !process.env.OPENAI_ASSISTANT_ID) {
-    //    return res.status(500).json({ message: "Erro de configuração do servidor: API OpenAI não configurada." });
-    // }
+const getNewWhatsAppSession = async (req, res, next) => {
     if (isInitializing) {
         return res.status(429).json({ message: "Já existe uma inicialização em andamento. Tente novamente em breve." });
     }
@@ -328,25 +322,26 @@ const getNewWhatsAppSession = async (req, res, next) => { // Adicionado 'next' p
 
         console.log("Criando nova instância do cliente WhatsApp...");
         clientInstance = new Client({
-            authStrategy: new LocalAuth({ clientId: "admin-bot-session" }), // Mudei o ID ligeiramente
+            authStrategy: new LocalAuth({ clientId: "admin-bot-session" }),
             puppeteer: {
-                // headless: false,
                 args: ['--no-sandbox', '--disable-setuid-sandbox'],
-                 // Importante: Timeout maior para o Puppeteer iniciar, especialmente em
-                 // ambientes com recursos limitados ou primeira execução (download do Chromium)
-                timeout: 120000 // 120 segundos
+                timeout: 120000
             }
         });
 
         let qrCodeValue = null;
+        let isReady = false; // Flag para saber se 'ready' já foi emitido
 
         const qrPromise = new Promise((resolve, reject) => {
             const timeoutId = setTimeout(() => {
-                console.error('Timeout esperando pelo QR code.');
-                reject(new Error('Timeout: QR code não foi gerado em 90 segundos. Verifique a conexão ou tente novamente.'));
-            }, 90000); // Aumentei o timeout para 90 segundos
+                 if (!isReady && !qrCodeValue) { // Só rejeita se nem conectou nem pegou QR
+                    console.error('Timeout esperando pelo QR code ou conexão pronta.');
+                    reject(new Error('Timeout: QR code não foi gerado ou cliente não conectou em 90 segundos.'));
+                 }
+            }, 90000);
 
             clientInstance.once('qr', (qr) => {
+                if (isReady) return; // Ignora QR se já estiver pronto
                 clearTimeout(timeoutId);
                 console.log('QR Code Recebido!');
                 qrCodeValue = qr;
@@ -355,22 +350,12 @@ const getNewWhatsAppSession = async (req, res, next) => { // Adicionado 'next' p
 
             clientInstance.once('ready', () => {
                 clearTimeout(timeoutId);
-                console.warn('Cliente ficou pronto ANTES do QR ser capturado (sessão restaurada).');
-                // Quando a sessão é restaurada, não há QR. A Promise NÃO deve resolver nem rejeitar neste caso,
-                // pois a sessão está OK. O front-end não receberá um QR, o que indica que deve
-                // ter conectado automaticamente (ou o admin já escaneou anteriormente).
-                // Podemos apenas logar e continuar. O importante é o listener 'ready' abaixo.
-                 console.log("Sessão restaurada, não será enviado QR.");
-                 // Se você *precisa* de um QR sempre, teria que desconectar/logout aqui e reiniciar.
-                 // Mas vamos manter o comportamento de restaurar sessão.
-                 // A Promise qrPromise vai eventualmente dar timeout se não for limpa,
-                 // então é crucial limpá-la no 'ready' se o QR não veio.
-                 // No entanto, vamos deixar o fluxo normal ocorrer: 'ready' será tratado abaixo.
-                 // A chamada para `await qrPromise` vai dar timeout se o 'ready' ocorrer sem 'qr'.
-                 // Vamos ajustar isso: se 'ready' vier primeiro, consideramos OK, mas sem QR.
-                 if (!qrCodeValue) { // Se 'ready' veio antes de 'qr'
-                    resolve(null); // Resolve a promise com null para indicar que não tem QR, mas conectou.
-                 }
+                console.warn('Cliente WhatsApp ficou pronto.');
+                isReady = true; // Marca como pronto
+                // Se o QR ainda não foi resolvido, resolve com null (conectou direto)
+                if (!qrCodeValue) {
+                    resolve(null);
+                }
             });
 
             clientInstance.once('auth_failure', (msg) => {
@@ -380,92 +365,142 @@ const getNewWhatsAppSession = async (req, res, next) => { // Adicionado 'next' p
             });
 
             clientInstance.once('disconnected', (reason) => {
-                clearTimeout(timeoutId);
-                 // Se desconectar *antes* de gerar QR ou ficar pronto, é um erro.
-                if (!qrCodeValue && clientInstance?.info == null) { // Verifica se ainda não está pronto
-                     console.error('Desconectado durante a espera inicial:', reason);
+                 clearTimeout(timeoutId);
+                 // Só rejeita se desconectar ANTES de ficar pronto ou ter QR
+                 if (!isReady && !qrCodeValue) {
+                    console.error('Desconectado durante a espera inicial:', reason);
                     reject(new Error('Cliente desconectado durante a inicialização: ' + reason));
-                } else {
-                    // Se desconectou depois de pronto/QR, o handler global cuidará disso.
-                    console.log('Desconectado (evento capturado durante espera, mas pode ser normal).');
-                }
+                 }
             });
         });
 
         console.log("Iniciando client.initialize()...");
-        // Tratamento de erro inicial, mas o principal é via eventos/promise
-        clientInstance.initialize().catch(initializeError => {
-            console.error("Erro CRÍTICO no initialize() inicial:", initializeError.message);
-            // Tenta rejeitar a promise se ainda não foi resolvida/rejeitada
-            // (isso pode acontecer se o puppeteer falhar muito cedo)
-            // Não podemos chamar reject diretamente aqui, então sinalizamos o erro.
-        });
+        // Captura erro SÍNCRONO do initialize, os assíncronos são pelos eventos
+        try {
+             await clientInstance.initialize();
+        } catch (initializeError) {
+             console.error("Erro CRÍTICO no initialize() inicial:", initializeError.message);
+             isInitializing = false;
+             throw initializeError; // Re-lança para o catch externo principal
+        }
+
 
         console.log("Aguardando QR code ou conexão pronta...");
-        const qrCode = await qrPromise; // Espera QR ou null (se conectou direto)
+        const qrCode = await qrPromise;
 
         // --- Listeners Principais (configurados APÓS initialize ser chamado) ---
-        // Limpa listeners antigos para garantir que não dupliquem
+        // Limpa listeners antigos para garantir que não dupliquem ao reiniciar a sessão
         clientInstance.removeAllListeners('message');
         clientInstance.removeAllListeners('ready');
         clientInstance.removeAllListeners('disconnected');
         clientInstance.removeAllListeners('auth_failure');
 
-        // Listener quando o cliente está pronto (seja via QR ou sessão restaurada)
+        // Listener 'ready' (redundante, mas seguro ter)
         clientInstance.on('ready', () => {
-            console.log(`✅ Cliente WhatsApp Conectado! ID: ${clientInstance.info.wid.user}`);
-            // Não faz nada na resposta da API aqui, pois ela já pode ter sido enviada (com QR ou null)
+             if (clientInstance?.info?.wid?.user) {
+                 console.log(`✅ Cliente WhatsApp Conectado/Pronto! ID: ${clientInstance.info.wid.user}`);
+             } else {
+                 console.log(`✅ Cliente WhatsApp Conectado/Pronto! (Info indisponível no momento)`);
+             }
+             isReady = true; // Garante que esteja marcado como pronto
         });
 
         // Listener para mensagens recebidas
         clientInstance.on('message', async (message) => {
-            // Ignora mensagens do próprio bot ou de status
-            if (message.fromMe || message.isStatus) return;
+             // <<< ADICIONADO: Tratamento para MENSAGENS COM MÍDIA (IMAGENS) >>>
+            if (message.hasMedia && ['image'].includes(message.type)) {
+                console.log(`[${message.from}] Mensagem com MÍDIA (${message.type}) recebida.`);
+                try {
+                    console.log(`[${message.from}] Baixando mídia...`);
+                    const mediaData = await message.downloadMedia(); // Retorna um objeto MessageMedia
 
-            const chatId = message.from; // ID do chat do usuário
+                    if (mediaData) {
+                        console.log(`[${message.from}] Mídia baixada. Mimetype: ${mediaData.mimetype}, Size: ${mediaData.data.length} bytes`);
+
+                        // AGORA, chama a função `save_image_buffer` via availableTools
+                        const saveToolArgs = {
+                            fileBuffer: mediaData.data, // Passa a string base64
+                            originalFilename: mediaData.filename || `whatsapp-image-${Date.now()}.${mediaData.mimetype.split('/')[1] || 'jpg'}`, // Usa nome original se houver, senão gera um
+                            mimetype: mediaData.mimetype
+                        };
+
+                         // Chama diretamente a função mapeada em availableTools
+                         // (Simulando o que o processRun faria se a IA pedisse)
+                         const resultOutput = await availableTools.save_image_buffer(saveToolArgs);
+                         const result = JSON.parse(resultOutput); // Parseia o resultado JSON string
+
+                        if (result.error) {
+                             console.error(`[${message.from}] Erro ao salvar imagem via service: ${result.error}`);
+                             await message.reply(`Desculpe, houve um erro ao processar sua imagem: ${result.error}`);
+                        } else {
+                             console.log(`[${message.from}] Imagem salva com sucesso: ${result.fileName}`);
+                             // Aqui você pode continuar a conversa com a IA, informando que a imagem foi salva
+                             // e passando o caminho (result.filePath) se necessário para a IA.
+                             // Exemplo: Enviar uma mensagem de confirmação e talvez iniciar o run da IA
+                             await message.reply(`Sua imagem foi recebida e salva com sucesso! (${result.fileName})`);
+
+                             // Opcional: Iniciar um run da IA após salvar a imagem
+                             /*
+                             const threadId = await getOrCreateThread(message.from);
+                             await openai.beta.threads.messages.create(threadId, {
+                                 role: "user",
+                                 content: `A imagem ${result.fileName} (${result.originalName}) foi salva com sucesso no caminho ${result.filePath}. O que devo fazer agora?`,
+                             });
+                             const run = await openai.beta.threads.runs.create(threadId, { assistant_id: assistantId });
+                             const assistantResponse = await processRun(threadId, run.id, message.from);
+                             if (assistantResponse) {
+                                 await clientInstance.sendMessage(message.from, assistantResponse);
+                             }
+                             */
+                        }
+                    } else {
+                        console.warn(`[${message.from}] Falha ao baixar mídia.`);
+                        await message.reply("Não consegui processar a imagem que você enviou. Tente novamente.");
+                    }
+                } catch (mediaError) {
+                    console.error(`[${message.from}] Erro ao processar mídia:`, mediaError);
+                    await message.reply("Ocorreu um erro ao processar a imagem. Tente novamente.");
+                }
+                return; // Não processa mais como texto normal se for mídia
+            }
+            // <<< FIM DO TRATAMENTO DE MÍDIA >>>
+
+
+            // Ignora mensagens do próprio bot ou de status (mantido)
+            if (message.fromMe || message.isStatus || message.type !== 'chat') return;
+
+            const chatId = message.from;
             const userMessage = message.body;
 
-            console.log(`[${chatId}] Mensagem recebida: "${userMessage}"`);
+            console.log(`[${chatId}] Mensagem de TEXTO recebida: "${userMessage}"`);
 
-            // Simplesmente encaminha para o OpenAI Assistant
             try {
-                 // 1. Obter/Criar Thread
                 const threadId = await getOrCreateThread(chatId);
-
-                // 2. Adicionar mensagem do usuário à Thread
                 console.log(`[${chatId}] Adicionando mensagem à thread ${threadId}...`);
                 await openai.beta.threads.messages.create(threadId, {
                     role: "user",
                     content: userMessage,
                 });
 
-                 // 3. Criar e Processar o Run
                  console.log(`[${chatId}] Criando run com assistente ${assistantId}...`);
                  const run = await openai.beta.threads.runs.create(threadId, {
                      assistant_id: assistantId,
-                     // Instruções adicionais podem ser passadas aqui se necessário
-                     // instructions: "Seja breve e amigável."
                  });
                  console.log(`[${chatId}] Run criado: ${run.id}. Processando...`);
 
-                 // 4. Esperar o resultado (que pode envolver chamadas de função)
                  const assistantResponse = await processRun(threadId, run.id, chatId);
 
-                 // 5. Enviar resposta de volta via WhatsApp
                  if (assistantResponse) {
                     console.log(`[${chatId}] Enviando resposta via WhatsApp...`);
                     await clientInstance.sendMessage(chatId, assistantResponse);
                     console.log(`[${chatId}] Resposta enviada.`);
                  } else {
                      console.warn(`[${chatId}] ProcessRun concluído sem uma resposta final para enviar.`);
-                      // Opcional: Enviar mensagem genérica
-                      // await clientInstance.sendMessage(chatId, "Não consegui gerar uma resposta no momento.");
                  }
 
             } catch (error) {
                 console.error(`[${chatId}] Erro ao processar mensagem com OpenAI:`, error);
                 try {
-                    // Tenta enviar uma mensagem de erro para o usuário
                     await clientInstance.sendMessage(chatId, "Desculpe, ocorreu um erro ao processar sua solicitação. Tente novamente mais tarde.");
                 } catch (sendError) {
                     console.error(`[${chatId}] Falha ao enviar mensagem de erro para o usuário:`, sendError);
@@ -476,15 +511,31 @@ const getNewWhatsAppSession = async (req, res, next) => { // Adicionado 'next' p
          // Listener para desconexão
          clientInstance.on('disconnected', (reason) => {
              console.warn('Cliente foi desconectado!', reason);
-             chatThreadMap = {}; // Limpa o mapeamento de threads ao desconectar
-             clientInstance = null; // Limpa a referência global
+             // Limpar estado ao desconectar
+             isReady = false;
+             qrCodeValue = null;
+             // Limpar o mapa de threads é importante para forçar a criação de novas na reconexão
+             Object.keys(chatThreadMap).forEach(key => delete chatThreadMap[key]);
+             console.log("Mapeamento de threads limpo.");
+             if (clientInstance) {
+                 clientInstance.destroy().catch(e => console.error("Erro ao destruir cliente na desconexão:", e));
+             }
+             clientInstance = null;
+             isInitializing = false; // Libera o lock se desconectou
          });
 
-         // Listener para falha de autenticação (pode ocorrer depois de conectar)
+         // Listener para falha de autenticação
          clientInstance.on('auth_failure', msg => {
              console.error('FALHA NA AUTENTICAÇÃO (após conexão inicial):', msg);
-             chatThreadMap = {};
+             isReady = false;
+             qrCodeValue = null;
+              Object.keys(chatThreadMap).forEach(key => delete chatThreadMap[key]);
+              console.log("Mapeamento de threads limpo devido à falha de autenticação.");
+             if (clientInstance) {
+                  clientInstance.destroy().catch(e => console.error("Erro ao destruir cliente na falha de auth:", e));
+             }
              clientInstance = null;
+             isInitializing = false; // Libera o lock
          });
          // --- Fim dos Listeners ---
 
@@ -494,7 +545,6 @@ const getNewWhatsAppSession = async (req, res, next) => { // Adicionado 'next' p
             console.log("Enviando QR code para o front-end.");
             res.status(200).json({ qr: qrCode, message: "QR Code gerado. Escaneie com o WhatsApp." });
         } else {
-             // Se qrCode for null, significa que conectou direto ('ready' veio antes de 'qr')
              console.log("Conexão restaurada/estabelecida sem necessidade de QR code.");
              res.status(200).json({ qr: null, message: "Conectado com sucesso (sessão existente ou conexão rápida)." });
         }
@@ -502,19 +552,16 @@ const getNewWhatsAppSession = async (req, res, next) => { // Adicionado 'next' p
     } catch (error) {
         console.error("Erro GERAL no processo de obter nova sessão:", error);
         await destroyClient(); // Garante limpeza em caso de erro grave
-        // Passa o erro para o handler global do Express se 'next' foi passado
         if (next) {
             next(error);
         } else {
-            // Resposta padrão se 'next' não estiver disponível
             res.status(500).json({ message: "Erro ao iniciar sessão do WhatsApp.", error: error.message });
         }
     } finally {
-        isInitializing = false; // Libera o lock
+        isInitializing = false; // Libera o lock SEMPRE
     }
 };
 
 module.exports = {
     getNewWhatsAppSession
-    // Exporte outras funções se necessário
 };
