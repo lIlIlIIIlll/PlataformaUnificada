@@ -25,7 +25,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined, QuestionCircleOutlined } fr
 import dayjs from 'dayjs';
 import 'dayjs/locale/pt-br';
 import ptBR from 'antd/locale/pt_BR'; // Locale para Ant Design
-import { API_BASE_URL } from '../config/apiConfig'; // <-- Importa a URL base
+import { API_BASE_URL } from '../../config/apiConfig'; // <-- Importa a URL base
 
 dayjs.locale('pt-br');
 

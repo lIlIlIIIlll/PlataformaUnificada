@@ -103,7 +103,7 @@ module.exports = (sequelize) => {
     },
     lastLoginAt: {
         type: DataTypes.DATE, // Match SQL DATETIME
-        allowNull: false, // SQL requires it, might need manual update on login
+        allowNull: true, // SQL requires it, might need manual update on login
         comment: 'Data e hora do último login.',
     }
     // createdAt and updatedAt are handled by timestamps: true

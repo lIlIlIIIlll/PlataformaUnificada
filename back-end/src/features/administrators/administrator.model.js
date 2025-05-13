@@ -1,23 +1,19 @@
 // src/features/administrators/administrator.model.js
 const { DataTypes, Model } = require('sequelize');
-// IMPORTANT: You'll need bcrypt for password hashing in your service/controller layer
-// const bcrypt = require('bcrypt');
+// const bcrypt = require('bcrypt'); // Mantenha se for usar hooks para hash
 
 module.exports = (sequelize) => {
   class Administrator extends Model {
-    // Example method for password validation (implement in service/controller usually)
-    // async validPassword(password) {
-    //   return bcrypt.compare(password, this.password);
-    // }
-
+    // static associate(models) { ... } // Associação permanece a mesma
     static associate(models) {
       // Administrator belongs to many Branches (Many-to-Many)
+      // Esta associação é PRIMORDIAL para Administradores de Filial
       Administrator.belongsToMany(models.Branch, {
-        through: 'administrator_branch', // Junction table name
-        foreignKey: 'id_adm',             // FK in junction table pointing to Administrator
-        otherKey: 'id_filial',           // FK in junction table pointing to Branch
-        as: 'branches',
-        timestamps: false // Junction table likely doesn't have timestamps
+        through: 'administrator_branch', // Nome da tabela de junção
+        foreignKey: 'id_adm',             // FK na tabela de junção apontando para Administrator
+        otherKey: 'id_filial',           // FK na tabela de junção apontando para Branch
+        as: 'branches',                  // Alias para acessar as filiais associadas
+        timestamps: false                // Tabela de junção provavelmente não tem timestamps
       });
     }
   }
@@ -37,43 +33,33 @@ module.exports = (sequelize) => {
     email: {
         type: DataTypes.STRING(255),
         allowNull: false,
-        unique: true, // Match SQL UNIQUE constraint
-        validate: { // Optional: Add email format validation
+        unique: true,
+        validate: {
             isEmail: true,
         },
         comment: 'Email único do administrador para login.',
     },
     password: {
-      type: DataTypes.STRING(255), // Stores the HASH, not plain text!
+      type: DataTypes.STRING(255), // Armazena o HASH
       allowNull: false,
       comment: 'Hash da senha do administrador.',
     },
-    // createdAt is handled by timestamps: true
+    // --- NOVO CAMPO ROLE ---
+    role: {
+      type: DataTypes.ENUM('superadmin', 'branch_admin'), // Define os papéis permitidos
+      allowNull: false,
+      defaultValue: 'branch_admin', // Define 'branch_admin' como padrão ao criar
+      comment: 'Define o nível de permissão: superadmin (geral) ou branch_admin (restrito à filial).',
+    }
+    // createdAt e updatedAt são gerenciados por timestamps: true
   }, {
     sequelize,
     modelName: 'Administrator',
     tableName: 'administrators',
-    timestamps: true, // Manages createdAt and updatedAt
-    // If SQL *only* has createdAt:
-    // timestamps: true,
-    // updatedAt: false,
-    // createdAt: 'createdAt'
+    timestamps: true, // Gerencia createdAt e updatedAt
     underscored: true,
     comment: 'Tabela para armazenar dados dos administradores do painel.',
-    // hooks: { // Example hook for hashing password BEFORE creation/update
-    //   beforeCreate: async (admin) => {
-    //     if (admin.password) {
-    //       const salt = await bcrypt.genSalt(10);
-    //       admin.password = await bcrypt.hash(admin.password, salt);
-    //     }
-    //   },
-    //   beforeUpdate: async (admin) => {
-    //     if (admin.changed('password')) { // Only hash if password changed
-    //        const salt = await bcrypt.genSalt(10);
-    //        admin.password = await bcrypt.hash(admin.password, salt);
-    //     }
-    //   }
-    // }
+    // hooks: { ... } // Hooks de hash de senha podem ser adicionados aqui se necessário
   });
 
   return Administrator;

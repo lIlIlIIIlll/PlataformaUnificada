@@ -1,7 +1,7 @@
 // src/app.js
+const path = require('path');
 const express = require('express');
 const db = require('./index'); // Ensure this initializes models and associations
-const path = require('path');
 const cors = require('cors');
 const multer = require('multer');
 
@@ -16,6 +16,7 @@ const settingRoutes = require('./features/settings/setting.routes');
 const whatsappRoutes = require('./features/whatsapp/whatsappRoutes');
 const hikvisionRoutes = require('./features/hikvision/hikvision.routes');
 const uploadRoutes = require('./features/uploads/upload.routes');
+const authRoutes = require('./features/auth/auth.routes');
 // Import other routes as needed
 
 // --- IMPORTANTE: Importar o Model e a Config de Seeding ---
@@ -39,6 +40,7 @@ app.use('/uploads', express.static(uploadsDir));
 // --- API Routes ---
 const API_PREFIX = '/api/v1';
 
+app.use(`${API_PREFIX}/auth`, authRoutes);
 app.use(`${API_PREFIX}/users`, userRoutes);
 app.use(`${API_PREFIX}/administrators`, administratorRoutes);
 app.use(`${API_PREFIX}/branches`, branchRoutes);
@@ -62,6 +64,10 @@ app.get('/', (req, res) => {
 // Place this AFTER all your routes
 app.use((err, req, res, next) => {
   console.error("Global Error Handler:", err); // Log the error
+
+  if (err.status === 401 || err.message === 'Credenciais inválidas.') {
+    return res.status(401).json({ message: err.message || 'Não autorizado.' });
+  }
 
   if (err instanceof multer.MulterError) {
     // Erros conhecidos do Multer (ex: limite de tamanho)
