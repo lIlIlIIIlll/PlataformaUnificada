@@ -1,7 +1,7 @@
 // src/features/branches/branch.routes.js
 const express = require('express');
 const branchController = require('./branch.controller');
-// const { authenticate, authorize } = require('../../middleware/auth'); // Example Auth Middleware
+// const { authenticate, authorize } = require('../../middleware/auth'); // Exemplo Auth Middleware
 
 const router = express.Router();
 
@@ -9,12 +9,13 @@ const router = express.Router();
  * @swagger
  * tags:
  *   name: Branches
- *   description: Gerenciamento de Filiais
+ *   description: Gerenciamento de Filiais e suas conexões WhatsApp
  */
 
-// Apply authentication/authorization middleware if needed
-// router.use(authenticate); // Example: All branch routes require login
-// router.use(authorize('admin')); // Example: All branch routes require admin role
+// router.use(authenticate); // Exemplo: Todas as rotas de filial podem requerer autenticação
+// router.use(authorize('admin')); // Exemplo: Operações de escrita/gerenciamento podem requerer role de admin
+
+// --- Rotas CRUD de Filial (Existentes) ---
 
 /**
  * @swagger
@@ -23,16 +24,13 @@ const router = express.Router();
  *     summary: Cria uma nova filial
  *     tags: [Branches]
  *     security:
- *       - bearerAuth: [] # Assuming JWT Bearer token auth
+ *       - bearerAuth: [] 
  *     requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/BranchInput' } } } }
  *     responses:
  *       201: { description: Filial criada, content: { application/json: { schema: { $ref: '#/components/schemas/Branch' } } } }
  *       400: { description: Dados inválidos }
- *       401: { description: Não autorizado }
- *       403: { description: Proibido (permissão insuficiente) }
- *       500: { description: Erro interno }
  */
-router.post('/', branchController.createBranch); // Add middleware like authorize('admin') if needed
+router.post('/', branchController.createBranch); 
 
 /**
  * @swagger
@@ -47,9 +45,8 @@ router.post('/', branchController.createBranch); // Add middleware like authoriz
  *         description: Inclui associações (users, lockers, administrators)
  *     responses:
  *       200: { description: Lista de filiais, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Branch' } } } } }
- *       500: { description: Erro interno }
  */
-router.get('/', branchController.getAllBranches); // Public or Authenticated? Add middleware as needed
+router.get('/', branchController.getAllBranches); 
 
 /**
  * @swagger
@@ -70,7 +67,6 @@ router.get('/', branchController.getAllBranches); // Public or Authenticated? Ad
  *     responses:
  *       200: { description: Dados da filial, content: { application/json: { schema: { $ref: '#/components/schemas/Branch' } } } }
  *       404: { description: Filial não encontrada }
- *       500: { description: Erro interno }
  */
 router.get('/:id', branchController.getBranchById);
 
@@ -87,96 +83,119 @@ router.get('/:id', branchController.getBranchById);
  *     responses:
  *       200: { description: Filial atualizada, content: { application/json: { schema: { $ref: '#/components/schemas/Branch' } } } }
  *       400: { description: Dados inválidos }
- *       401: { description: Não autorizado }
- *       403: { description: Proibido }
  *       404: { description: Filial não encontrada }
- *       500: { description: Erro interno }
  */
-router.put('/:id', branchController.updateBranch); // Add middleware
+router.put('/:id', branchController.updateBranch); 
 
 /**
  * @swagger
  * /branches/{id}:
  *   delete:
- *     summary: Exclui uma filial
+ *     summary: Exclui uma filial (e tenta limpar sua sessão WhatsApp)
  *     tags: [Branches]
  *     security:
  *       - bearerAuth: []
  *     parameters: [{ in: path, name: id, required: true, schema: { type: integer }, description: ID da filial }]
  *     responses:
  *       204: { description: Filial excluída }
- *       401: { description: Não autorizado }
- *       403: { description: Proibido }
  *       404: { description: Filial não encontrada }
  *       409: { description: Conflito (filial possui dependências) }
- *       500: { description: Erro interno }
  */
-router.delete('/:id', branchController.deleteBranch); // Add middleware
+router.delete('/:id', branchController.deleteBranch); 
 
-// --- Routes for managing Administrator associations ---
+// --- Rotas de Associação de Administradores (Existentes) ---
+router.post('/:branchId/administrators/:administratorId', branchController.addAdministratorToBranch);
+router.delete('/:branchId/administrators/:administratorId', branchController.removeAdministratorFromBranch);
+
+
+// --- NOVAS Rotas para Gerenciamento do WhatsApp da Filial ---
 
 /**
  * @swagger
- * /branches/{branchId}/administrators/{administratorId}:
+ * /branches/{branchId}/whatsapp/connect:
  *   post:
- *     summary: Associa um administrador a uma filial
+ *     summary: Inicia ou tenta reconectar a sessão WhatsApp para uma filial
  *     tags: [Branches]
  *     security:
- *       - bearerAuth: []
+ *       - bearerAuth: [] # Proteger esta rota
  *     parameters:
  *       - in: path
  *         name: branchId
  *         required: true
  *         schema: { type: integer }
  *         description: ID da Filial
- *       - in: path
- *         name: administratorId
- *         required: true
- *         schema: { type: integer }
- *         description: ID do Administrador
  *     responses:
- *       200: { description: Associação criada }
- *       401: { description: Não autorizado }
- *       403: { description: Proibido }
- *       404: { description: Filial ou Administrador não encontrado }
- *       409: { description: Associação já existe }
- *       500: { description: Erro interno }
+ *       202: { description: Solicitação de conexão aceita. O frontend deve pollar o status para obter QR code ou confirmação. }
+ *       400: { description: Falha ao iniciar a solicitação de conexão. }
+ *       404: { description: Filial não encontrada. }
  */
-router.post('/:branchId/administrators/:administratorId', branchController.addAdministratorToBranch); // Add middleware
+router.post('/:branchId/whatsapp/connect', branchController.initiateWhatsAppConnectionController);
 
 /**
  * @swagger
- * /branches/{branchId}/administrators/{administratorId}:
- *   delete:
- *     summary: Remove a associação de um administrador de uma filial
+ * /branches/{branchId}/whatsapp/status:
+ *   get:
+ *     summary: Obtém o status atual da conexão WhatsApp de uma filial
  *     tags: [Branches]
  *     security:
- *       - bearerAuth: []
+ *       - bearerAuth: [] # Proteger esta rota
  *     parameters:
  *       - in: path
  *         name: branchId
  *         required: true
  *         schema: { type: integer }
  *         description: ID da Filial
+ *     responses:
+ *       200: { description: Status da conexão, pode incluir QR code se pendente., content: { application/json: { schema: { $ref: '#/components/schemas/WhatsAppStatus' } } } }
+ *       404: { description: Filial não encontrada. }
+ */
+router.get('/:branchId/whatsapp/status', branchController.getWhatsAppConnectionStatusController);
+
+/**
+ * @swagger
+ * /branches/{branchId}/whatsapp/disconnect:
+ *   post:
+ *     summary: Desconecta a sessão WhatsApp de uma filial
+ *     tags: [Branches]
+ *     security:
+ *       - bearerAuth: [] # Proteger esta rota
+ *     parameters:
  *       - in: path
- *         name: administratorId
+ *         name: branchId
  *         required: true
  *         schema: { type: integer }
- *         description: ID do Administrador
+ *         description: ID da Filial
  *     responses:
- *       200: { description: Associação removida }
- *       204: { description: Associação removida (alternativa) }
- *       401: { description: Não autorizado }
- *       403: { description: Proibido }
- *       404: { description: Filial, Administrador ou Associação não encontrada }
- *       500: { description: Erro interno }
+ *       200: { description: Sessão desconectada com sucesso ou já estava desconectada. }
+ *       404: { description: Filial não encontrada. }
  */
-router.delete('/:branchId/administrators/:administratorId', branchController.removeAdministratorFromBranch); // Add middleware
+router.post('/:branchId/whatsapp/disconnect', branchController.disconnectWhatsAppController);
+
+/**
+ * @swagger
+ * /branches/{branchId}/whatsapp/session/clear:
+ *   delete:
+ *     summary: Limpa completamente a sessão WhatsApp de uma filial (arquivos e DB)
+ *     tags: [Branches]
+ *     security:
+ *       - bearerAuth: [] # Proteger esta rota
+ *     parameters:
+ *       - in: path
+ *         name: branchId
+ *         required: true
+ *         schema: { type: integer }
+ *         description: ID da Filial
+ *     responses:
+ *       200: { description: Sessão limpa com sucesso. }
+ *       400: { description: Falha ao limpar a sessão. }
+ *       404: { description: Filial não encontrada. }
+ */
+router.delete('/:branchId/whatsapp/session/clear', branchController.clearWhatsAppSessionController);
 
 
 module.exports = router;
 
-// --- Swagger Schema Definitions ---
+// --- Swagger Schema Definitions (Adicionar/Atualizar) ---
 /**
  * @swagger
  * components:
@@ -186,6 +205,7 @@ module.exports = router;
  *       properties:
  *         name: { type: string, example: "Filial Centro" }
  *         address: { type: string, example: "Rua Principal, 100", nullable: true }
+ *         openaiAssistantIdOverride: { type: string, nullable: true, description: "ID do Assistente OpenAI específico para esta filial" }
  *       required:
  *         - name
  *     Branch:
@@ -194,9 +214,23 @@ module.exports = router;
  *         - type: object
  *           properties:
  *             id: { type: integer, readOnly: true }
+ *             whatsappSessionId: { type: string, readOnly: true, nullable: true, description: "ID da sessão WhatsApp" }
+ *             whatsappStatus: { type: string, enum: ['disconnected', 'connecting', 'qr_pending', 'connected', 'auth_failure', 'error', 'initializing', 'destroying'], readOnly: true, description: "Status da conexão WhatsApp" }
+ *             whatsappNumber: { type: string, readOnly: true, nullable: true, description: "Número WhatsApp conectado" }
+ *             whatsappLastError: { type: string, readOnly: true, nullable: true, description: "Último erro da conexão WhatsApp" }
+ *             # whatsappQrCode não é usualmente retornado aqui, mas sim no endpoint de status específico
  *             createdAt: { type: string, format: date-time, readOnly: true }
  *             updatedAt: { type: string, format: date-time, readOnly: true }
  *             users: { type: array, items: { $ref: '#/components/schemas/User' }, readOnly: true, description: "Incluído via ?include=users" }
  *             lockers: { type: array, items: { $ref: '#/components/schemas/Locker' }, readOnly: true, description: "Incluído via ?include=lockers" }
  *             administrators: { type: array, items: { $ref: '#/components/schemas/Administrator' }, readOnly: true, description: "Incluído via ?include=administrators" }
+ *     WhatsAppStatus:
+ *       type: object
+ *       properties:
+ *         branchId: { type: integer }
+ *         status: { type: string, enum: ['disconnected', 'connecting', 'qr_pending', 'connected', 'auth_failure', 'error', 'initializing', 'destroying'] }
+ *         qrCode: { type: string, nullable: true, description: "QR Code em base64, se status for qr_pending" }
+ *         lastError: { type: string, nullable: true }
+ *         connectedNumber: { type: string, nullable: true }
+ *         sessionId: { type: string, nullable: true }
  */
