@@ -88,58 +88,58 @@ const UsersPage = () => {
         showTotal: (total, range) => `${range[0]}-${range[1]} de ${total} usuários`,
     });
 
-    useEffect(() => {
-        console.log("Clientes: Verificando dados do usuário...");
-        setIsLoadingPermissions(true);
-        let role = null;
-        let managedIds = [];
-        let managedNames = [];
-        let initialBranchFilter = null;
+    // useEffect(() => {
+    //     console.log("Clientes: Verificando dados do usuário...");
+    //     setIsLoadingPermissions(true);
+    //     let role = null;
+    //     let managedIds = [];
+    //     let managedNames = [];
+    //     let initialBranchFilter = null;
 
-        try {
-            const userDataString = sessionStorage.getItem('userData');
-            if (!userDataString) throw new Error("Usuário não autenticado.");
+    //     try {
+    //         const userDataString = sessionStorage.getItem('userData');
+    //         if (!userDataString) throw new Error("Usuário não autenticado.");
 
-            const userData = JSON.parse(userDataString);
-            if (!userData || !userData.role) throw new Error("Dados de usuário inválidos.");
+    //         const userData = JSON.parse(userDataString);
+    //         if (!userData || !userData.role) throw new Error("Dados de usuário inválidos.");
 
-            role = userData.role;
-            console.log("Clientes: Papel encontrado:", role);
-            setUserRole(role);
+    //         role = userData.role;
+    //         console.log("Clientes: Papel encontrado:", role);
+    //         setUserRole(role);
 
-            if (role === 'branch_admin') {
-                if (!userData.branches || !Array.isArray(userData.branches) || userData.branches.length === 0) {
-                     console.warn("Clientes: 'branch_admin' sem filiais associadas em userData.");
-                     managedIds = [];
-                     managedNames = [];
-                     initialBranchFilter = -1;
-                } else {
-                    managedIds = userData.branches.map(b => b.id);
-                    managedNames = userData.branches.map(b => b.name);
-                    setUserManagedBranchIds(managedIds);
-                    setUserManagedBranchNames(managedNames);
-                    initialBranchFilter = managedIds[0];
-                    console.log("Clientes: Branch Admin - Filtro inicial para filial ID:", initialBranchFilter);
-                }
-                 setFilters(prev => ({ ...prev, branchId: initialBranchFilter }));
-            } else if (role === 'superadmin') {
-                setFilters(prev => ({ ...prev, branchId: null }));
-            }
-             else if (role !== 'superadmin') {
-                 throw new Error("Papel de usuário não reconhecido ou não suportado nesta página.");
-            }
-            fetchBranches();
-        } catch (err) {
-            console.error("Clientes: Erro ao processar dados do usuário.", err);
-            message.error(`Erro ao verificar permissões: ${err.message}. Redirecionando para login.`);
-            sessionStorage.removeItem('authToken');
-            sessionStorage.removeItem('userData');
-            router.replace('/login');
-        } finally {
-            setIsLoadingPermissions(false);
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [router]);
+    //         if (role === 'branch_admin') {
+    //             if (!userData.branches || !Array.isArray(userData.branches) || userData.branches.length === 0) {
+    //                  console.warn("Clientes: 'branch_admin' sem filiais associadas em userData.");
+    //                  managedIds = [];
+    //                  managedNames = [];
+    //                  initialBranchFilter = -1;
+    //             } else {
+    //                 managedIds = userData.branches.map(b => b.id);
+    //                 managedNames = userData.branches.map(b => b.name);
+    //                 setUserManagedBranchIds(managedIds);
+    //                 setUserManagedBranchNames(managedNames);
+    //                 initialBranchFilter = managedIds[0];
+    //                 console.log("Clientes: Branch Admin - Filtro inicial para filial ID:", initialBranchFilter);
+    //             }
+    //              setFilters(prev => ({ ...prev, branchId: initialBranchFilter }));
+    //         } else if (role === 'superadmin') {
+    //             setFilters(prev => ({ ...prev, branchId: null }));
+    //         }
+    //          else if (role !== 'superadmin') {
+    //              throw new Error("Papel de usuário não reconhecido ou não suportado nesta página.");
+    //         }
+    //         fetchBranches();
+    //     } catch (err) {
+    //         console.error("Clientes: Erro ao processar dados do usuário.", err);
+    //         message.error(`Erro ao verificar permissões: ${err.message}. Redirecionando para login.`);
+    //         sessionStorage.removeItem('authToken');
+    //         sessionStorage.removeItem('userData');
+    //         router.replace('/login');
+    //     } finally {
+    //         setIsLoadingPermissions(false);
+    //     }
+    // // eslint-disable-next-line react-hooks/exhaustive-deps
+    // }, [router]);
 
 
     const fetchUsers = useCallback(async (page = 1, pageSize = 10, currentFilters) => {

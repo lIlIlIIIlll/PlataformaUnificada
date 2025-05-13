@@ -6,8 +6,8 @@ const branchService = require('../branches/branch.service'); // Para buscar o as
 
 // --- Configuração OpenAI ---
 // A chave da API e o ID do assistente padrão devem vir de variáveis de ambiente
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const DEFAULT_OPENAI_ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID;
+const OPENAI_API_KEY = "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";
+const DEFAULT_OPENAI_ASSISTANT_ID = "asst_w7MdrgBxinVyfrmvZIyv5Vg0";
 
 if (!OPENAI_API_KEY || !DEFAULT_OPENAI_ASSISTANT_ID) {
     console.error("ALERTA: Variáveis de ambiente OPENAI_API_KEY ou OPENAI_ASSISTANT_ID não definidas. Funcionalidade do Bot pode ser afetada.");

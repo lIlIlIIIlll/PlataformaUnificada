@@ -6,7 +6,7 @@ import Head from 'next/head';
 import {
     Tabs, Typography, Button, Modal, Form, Input, message, Spin, Space,
     Tooltip, Popconfirm, Table, Descriptions, ConfigProvider, Row, Col, InputNumber,
-    Select, Tag, List, Image as AntImage // Importar List e Image do Antd
+    Select, Tag, List, Image as AntImage, QRCode // Importar List e Image do Antd
 } from 'antd';
 import {
     EditOutlined, DeleteOutlined, PlusOutlined, SaveOutlined, SettingOutlined,
@@ -102,6 +102,8 @@ const AdministrationPage = () => {
     const [isHikvisionModalVisible, setIsHikvisionModalVisible] = useState(false);
     const [editingHikvision, setEditingHikvision] = useState(null);
     const [hikvisionForm] = Form.useForm();
+
+    
 
     // --- Fetch Data (API) ---
     const fetchSettings = useCallback(async () => {
@@ -540,11 +542,18 @@ const AdministrationPage = () => {
                 {currentQrCode ? (
                     <div style={{ textAlign: 'center' }}>
                         <Paragraph>Escaneie este QR Code com o aplicativo WhatsApp no celular que será o bot desta filial.</Paragraph>
-                        <AntImage
-                            width={280}
-                            src={`data:image/png;base64,${currentQrCode}`}
-                            alt="QR Code WhatsApp"
-                            preview={false}
+                        {/* MODIFICADO AQUI: Use o componente QRCode do AntD */}
+                        <QRCode
+                            value={currentQrCode} // currentQrCode é a string bruta vinda do whatsapp-web.js
+                            size={256} // Ajuste o tamanho conforme necessário
+                            style={{ display: 'block', margin: 'auto', marginBottom: '16px' }}
+                            // Opcional: status do QRCode do AntD
+                            status={
+                                (branchWhatsAppStatuses[branches.find(b => b.name === qrModalBranchName)?.id] || {}).status === 'connected' ? 'expired' :
+                                (branchWhatsAppStatuses[branches.find(b => b.name === qrModalBranchName)?.id] || {}).status === 'qr_pending' ? 'active' :
+                                'loading' // Ou outro status padrão
+                            }
+                            // errorLevel="H" // Opcional: nível de correção de erro
                         />
                         <Paragraph style={{ marginTop: 10 }}>
                             Status atual: {getWhatsAppStatusTag((branchWhatsAppStatuses[branches.find(b => b.name === qrModalBranchName)?.id] || {}).status)}
